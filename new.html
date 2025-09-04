@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Omegle</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .video-container {
+            position: relative;
+            width: 100%;
+            padding-top: 75%; /* 4:3 Aspect Ratio */
+        }
+        .video-feed {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 0.5rem;
+            transform: scaleX(-1); /* Mirror effect */
+        }
+        #local-video-container {
+            position: absolute;
+            bottom: 1rem;
+            right: 1rem;
+            width: 25%;
+            z-index: 10;
+            border: 2px solid white;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 flex items-center justify-center min-h-screen">
+
+    <div id="app-container" class="w-full max-w-4xl mx-auto p-4">
+
+        <!-- Header -->
+        <header class="text-center mb-6">
+            <h1 class="text-5xl font-bold text-gray-800">Omegle</h1>
+            <p class="text-gray-600 mt-2">Talk to strangers!</p>
+        </header>
+
+        <!-- Main Content -->
+        <main id="main-content" class="bg-white p-6 rounded-lg shadow-lg">
+
+            <!-- Home Screen -->
+            <div id="home-screen">
+                <p class="text-lg mb-4">Start a conversation with a random stranger. Please be respectful and have fun!</p>
+                <div id="initial-actions" class="flex flex-col sm:flex-row gap-4 justify-center">
+                    <button id="start-text-btn" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300 shadow-md">
+                        Text Chat
+                    </button>
+                    <button id="start-video-btn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition duration-300 shadow-md">
+                        Video Chat
+                    </button>
+                </div>
+                 <div id="status-text" class="text-center mt-4 text-gray-500 min-h-[24px]"></div>
+            </div>
+
+            <!-- Chat Screen -->
+            <div id="chat-screen" class="hidden">
+                <div class="flex flex-col lg:flex-row gap-4">
+                    <!-- Video Section -->
+                    <div id="video-chat-area" class="w-full lg:w-1/2 hidden">
+                        <div class="video-container bg-gray-900 rounded-lg shadow-inner relative">
+                            <video id="remote-video" class="video-feed" autoplay playsinline></video>
+                             <div id="video-placeholder" class="absolute inset-0 flex items-center justify-center text-white">
+                                <div class="text-center">
+                                    <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.55a1 1 0 011.45.89V16.11a1 1 0 01-1.45.89L15 14M5 10V7a2 2 0 012-2h3a2 2 0 012 2v3m-5 4v3a2 2 0 002 2h3a2 2 0 002-2v-3m-5-4h5m-5 4h5"></path></svg>
+                                    <p class="mt-2 text-sm font-medium">Connecting to stranger...</p>
+                                </div>
+                            </div>
+                            <div id="local-video-container" class="video-container rounded-lg overflow-hidden shadow-lg">
+                                <video id="local-video" class="video-feed" autoplay playsinline muted></video>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Text/Control Section -->
+                    <div class="flex-1 flex flex-col">
+                        <div id="messages" class="flex-grow bg-gray-50 border border-gray-200 rounded-lg p-4 mb-4 h-64 lg:h-auto overflow-y-auto">
+                           <!-- Messages will appear here -->
+                        </div>
+                        <div class="flex gap-2">
+                             <input type="text" id="message-input" placeholder="Type a message..." class="flex-grow border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500" disabled>
+                             <button id="send-btn" class="bg-blue-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-blue-600 transition duration-300" disabled>Send</button>
+                        </div>
+                         <div class="flex gap-2 mt-4">
+                            <button id="next-btn" class="flex-grow bg-red-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-red-600 transition duration-300">Next Stranger</button>
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Firebase -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, doc, addDoc, onSnapshot, deleteDoc, getDocs, query, limit, serverTimestamp, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // --- DOM ELEMENTS ---
+        const homeScreen = document.getElementById('home-screen');
+        const chatScreen = document.getElementById('chat-screen');
+        const startTextBtn = document.getElementById('start-text-btn');
+        const startVideoBtn = document.getElementById('start-video-btn');
+        const statusText = document.getElementById('status-text');
+        const messagesDiv = document.getElementById('messages');
+        const messageInput = document.getElementById('message-input');
+        const sendBtn = document.getElementById('send-btn');
+        const nextBtn = document.getElementById('next-btn');
+        const videoChatArea = document.getElementById('video-chat-area');
+        const localVideo = document.getElementById('local-video');
+        const remoteVideo = document.getElementById('remote-video');
+        const videoPlaceholder = document.getElementById('video-placeholder');
+
+        // --- FIREBASE SETUP ---
+        // --- FIREBASE SETUP ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyCKFdiShA5FNwYy3-jdBclGuQa8LGUvfEw",
+        authDomain: "omegle-f0b32.firebaseapp.com",
+        projectId: "omegle-f0b32",
+        storageBucket: "omegle-f0b32.appspot.com", // Note: I corrected this from .firebasestorage.app to .appspot.com, which is the standard format.
+        messagingSenderId: "926315634445",
+        appId: "1:926315634445:web:283e76e6bfd4b9899a5a44"
+        };
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
+        // --- WEBRTC SETUP ---
+        const servers = {
+            iceServers: [
+                { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
+            ],
+            iceCandidatePoolSize: 10,
+        };
+        let pc = new RTCPeerConnection(servers);
+        let localStream = null;
+        let remoteStream = null;
+
+        // --- APP STATE ---
+        let currentRoomId = null;
+        let unsubscribeRoom = null;
+        let unsubscribeCandidates = null;
+        let userId = null;
+        let isVideoChat = false;
+
+        // --- CORE FUNCTIONS ---
+        async function main() {
+            try {
+                await signInAnonymously(auth);
+                userId = auth.currentUser.uid;
+                startTextBtn.addEventListener('click', () => startChat(false));
+                startVideoBtn.addEventListener('click', () => startChat(true));
+                sendBtn.addEventListener('click', sendMessage);
+                messageInput.addEventListener('keyup', (e) => e.key === 'Enter' && sendMessage());
+                nextBtn.addEventListener('click', leaveChat);
+                window.addEventListener('beforeunload', leaveChat);
+            } catch (error) {
+                console.error("Authentication failed:", error);
+                statusText.textContent = "Error: Could not connect. Please refresh.";
+            }
+        }
+
+        async function startChat(videoEnabled) {
+            isVideoChat = videoEnabled;
+            startTextBtn.disabled = true;
+            startVideoBtn.disabled = true;
+            statusText.textContent = 'Searching for a stranger...';
+
+            if (isVideoChat) {
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                    localVideo.srcObject = localStream;
+                    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+                } catch (error) {
+                    console.error("Error accessing media devices.", error);
+                    statusText.textContent = "Error: Camera/mic access denied. Please allow and refresh.";
+                    resetUI();
+                    return;
+                }
+            }
+            await findPartner();
+        }
+        
+        async function findPartner() {
+            const waitingRoomRef = collection(db, 'waitingRoom');
+            const q = query(waitingRoomRef, limit(1));
+            const snapshot = await getDocs(q);
+
+            if (snapshot.empty) {
+                // No one is waiting, so I wait
+                const myWaitingDoc = await addDoc(waitingRoomRef, {
+                    userId: userId,
+                    isVideo: isVideoChat,
+                    timestamp: serverTimestamp()
+                });
+                onSnapshot(myWaitingDoc, (doc) => {
+                    if (!doc.exists()) {
+                        // My doc was deleted, means I was matched. The other user created the room.
+                        // I need to find the room I was invited to.
+                    }
+                });
+                 // Listen for an invitation
+                const roomsRef = collection(db, 'rooms');
+                const inviteQuery = query(collection(db, `users/${userId}/invites`), limit(1));
+                onSnapshot(inviteQuery, async (inviteSnapshot) => {
+                    if (!inviteSnapshot.empty) {
+                        const invite = inviteSnapshot.docs[0].data();
+                        const roomId = invite.roomId;
+                        await deleteDoc(doc(db, `users/${userId}/invites`, inviteSnapshot.docs[0].id));
+                        await deleteDoc(myWaitingDoc);
+                        joinRoom(roomId);
+                    }
+                });
+
+
+            } else {
+                // Someone is waiting, pair with them
+                const partnerDoc = snapshot.docs[0];
+                const partner = partnerDoc.data();
+                if (partner.userId === userId) {
+                    // This is my own waiting doc from a previous session, cleanup and retry
+                     await deleteDoc(partnerDoc.ref);
+                     findPartner(); // try again
+                     return;
+                }
+                await deleteDoc(partnerDoc.ref); // Remove them from waiting
+                
+                const newRoomRef = doc(collection(db, 'rooms'));
+                await setDoc(newRoomRef, {
+                    members: [userId, partner.userId],
+                    createdAt: serverTimestamp(),
+                    isVideo: isVideoChat || partner.isVideo // If either wants video, it's a video chat
+                });
+
+                // Invite the other user
+                await addDoc(collection(db, `users/${partner.userId}/invites`), { roomId: newRoomRef.id });
+
+                joinRoom(newRoomRef.id, true);
+            }
+        }
+
+        function joinRoom(roomId, isCaller = false) {
+            currentRoomId = roomId;
+            transitionToChat();
+            listenToRoom(roomId, isCaller);
+        }
+
+        function transitionToChat() {
+            homeScreen.classList.add('hidden');
+            chatScreen.classList.remove('hidden');
+            messageInput.disabled = false;
+            sendBtn.disabled = false;
+            if (isVideoChat) {
+                videoChatArea.classList.remove('hidden');
+                chatScreen.querySelector('.flex-col.lg\\:flex-row').classList.remove('lg:w-full');
+            } else {
+                 videoChatArea.classList.add('hidden');
+                 chatScreen.querySelector('.flex-col.lg\\:flex-row').classList.add('lg:w-full');
+            }
+        }
+
+        function listenToRoom(roomId, isCaller) {
+            const roomRef = doc(db, 'rooms', roomId);
+            const messagesRef = collection(roomRef, 'messages');
+            const offerCandidatesRef = collection(roomRef, 'offerCandidates');
+            const answerCandidatesRef = collection(roomRef, 'answerCandidates');
+
+            // WebRTC Logic
+            pc.onicecandidate = event => {
+                if(event.candidate) {
+                    const candidatesRef = isCaller ? offerCandidatesRef : answerCandidatesRef;
+                    addDoc(candidatesRef, event.candidate.toJSON());
+                }
+            };
+
+            pc.ontrack = event => {
+                remoteStream = new MediaStream();
+                event.streams[0].getTracks().forEach(track => {
+                    remoteStream.addTrack(track);
+                });
+                remoteVideo.srcObject = remoteStream;
+                videoPlaceholder.classList.add('hidden');
+            };
+
+            // Listen for room updates (offers/answers)
+            unsubscribeRoom = onSnapshot(roomRef, async snapshot => {
+                const data = snapshot.data();
+                if (!data) { // Room deleted
+                    appendMessage('Stranger has disconnected.', 'system');
+                    endChatSession();
+                    return;
+                }
+                
+                if (isCaller && !pc.currentRemoteDescription && data.answer) {
+                    const answerDescription = new RTCSessionDescription(data.answer);
+                    await pc.setRemoteDescription(answerDescription);
+                }
+
+                if (!isCaller && !pc.currentRemoteDescription && data.offer) {
+                    const offerDescription = new RTCSessionDescription(data.offer);
+                    await pc.setRemoteDescription(offerDescription);
+                    const answerDescription = await pc.createAnswer();
+                    await pc.setLocalDescription(answerDescription);
+                    await setDoc(roomRef, { answer: { type: answerDescription.type, sdp: answerDescription.sdp }}, { merge: true });
+                }
+            });
+            
+            // Create offer if caller
+            if(isCaller && isVideoChat) {
+                (async () => {
+                    const offerDescription = await pc.createOffer();
+                    await pc.setLocalDescription(offerDescription);
+                    await setDoc(roomRef, { offer: { type: offerDescription.type, sdp: offerDescription.sdp } }, { merge: true });
+                })();
+            }
+
+            // Listen for ICE candidates
+            const candidatesRef = isCaller ? answerCandidatesRef : offerCandidatesRef;
+            unsubscribeCandidates = onSnapshot(candidatesRef, snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added') {
+                        const candidate = new RTCIceCandidate(change.doc.data());
+                        pc.addIceCandidate(candidate);
+                    }
+                });
+            });
+
+            // Listen for text messages
+            onSnapshot(collection(db, 'rooms', roomId, 'messages'), snapshot => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === 'added') {
+                        const data = change.doc.data();
+                        const sender = data.sender === userId ? 'You' : 'Stranger';
+                        const cssClass = sender === 'You' ? 'you' : 'stranger';
+                        appendMessage(`${sender}: ${data.text}`, cssClass);
+                    }
+                });
+            });
+             appendMessage('You are now connected to a stranger.', 'system');
+
+        }
+
+        async function sendMessage() {
+            const text = messageInput.value.trim();
+            if (text && currentRoomId) {
+                await addDoc(collection(db, 'rooms', currentRoomId, 'messages'), {
+                    text: text,
+                    sender: userId,
+                    timestamp: serverTimestamp()
+                });
+                messageInput.value = '';
+            }
+        }
+        
+        async function leaveChat() {
+            if (currentRoomId) {
+                await deleteDoc(doc(db, 'rooms', currentRoomId));
+            }
+            endChatSession();
+            resetUI();
+            startChat(isVideoChat); // Find new partner automatically
+        }
+        
+        function endChatSession() {
+            if (unsubscribeRoom) unsubscribeRoom();
+            if (unsubscribeCandidates) unsubscribeCandidates();
+
+            pc.close();
+            pc = new RTCPeerConnection(servers);
+
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            localStream = null;
+            remoteStream = null;
+            localVideo.srcObject = null;
+            remoteVideo.srcObject = null;
+            videoPlaceholder.classList.remove('hidden');
+
+            currentRoomId = null;
+        }
+
+        function resetUI() {
+            chatScreen.classList.add('hidden');
+            homeScreen.classList.remove('hidden');
+            messagesDiv.innerHTML = '';
+            messageInput.value = '';
+            messageInput.disabled = true;
+            sendBtn.disabled = true;
+            startTextBtn.disabled = false;
+            startVideoBtn.disabled = false;
+            statusText.textContent = '';
+        }
+
+        function appendMessage(text, type) {
+            const p = document.createElement('p');
+            p.textContent = text;
+            if (type === 'system') {
+                p.className = 'text-sm text-gray-500 italic my-2';
+            } else if (type === 'you') {
+                p.className = 'text-blue-600 font-semibold';
+            } else { // stranger
+                p.className = 'text-red-600 font-semibold';
+            }
+            messagesDiv.appendChild(p);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+
+        main();
+
+    </script>
+</body>
+</html>
