@@ -1,35 +1,74 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import React from 'react';
+import EntryForm from './components/EntryForm';
+import ChatView from './components/ChatView';
+import useChatService from './hooks/useChatService';
+import './App.css';
 
 function App() {
-  const [count, setCount] = useState(0)
+  const {
+    status,
+    error,
+    chatRoomId,
+    messages,
+    startSearching,
+    leaveChat,
+    sendMessage,
+  } = useChatService();
+
+  const [isPartnerConnected, setIsPartnerConnected] = React.useState(false);
+
+  // This effect will help manage the UI state based on the chatRoomId
+  React.useEffect(() => {
+    if (chatRoomId) {
+      setIsPartnerConnected(true);
+    } else {
+      setIsPartnerConnected(false);
+    }
+  }, [chatRoomId]);
+
+  const handleStartChat = (formData) => {
+    startSearching(formData);
+  };
+
+  const handleNext = () => {
+    leaveChat();
+  };
+
+  // Render a loading indicator while the service is initializing
+  if (status === 'Initializing...' || status === 'Authenticating...') {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-lg">{status}</p>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p className="text-lg text-red-500">{error}</p>
+      </div>
+    );
+  }
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <div className="bg-gray-100 min-h-screen font-sans">
+      {!chatRoomId ? (
+        <div className="pt-10">
+          <EntryForm onSubmit={handleStartChat} />
+          {status && <p className="text-center text-gray-600 p-4">{status}</p>}
+        </div>
+      ) : (
+        <ChatView
+          messages={messages}
+          onSendMessage={sendMessage}
+          onNext={handleNext}
+          status={status}
+          isPartnerConnected={isPartnerConnected}
+        />
+      )}
+    </div>
+  );
 }
 
-export default App
+export default App;
