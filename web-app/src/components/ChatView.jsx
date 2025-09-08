@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import Message from './Message';
 import StatusIndicator from './StatusIndicator';
+import VideoChat from './VideoChat';
 
-const ChatView = ({ messages, onSendMessage, onNext, onReport, onBlock, status, isPartnerConnected }) => {
+const ChatView = ({ messages, onSendMessage, onNext, onReport, onBlock, status, isPartnerConnected, localStream, remoteStream }) => {
   const [text, setText] = useState('');
   const messagesEndRef = useRef(null);
 
@@ -34,10 +35,7 @@ const ChatView = ({ messages, onSendMessage, onNext, onReport, onBlock, status, 
         <h1 className="text-4xl font-bold text-gray-800 dark:text-white">Vergo</h1>
       </header>
       <main className="flex-1 flex flex-col lg:flex-row bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg overflow-hidden">
-        {/* Placeholder for video chat area */}
-        <div className="hidden lg:flex lg:w-1/2 bg-gray-900 rounded-lg items-center justify-center text-white">
-          <p>Video Chat Area (Future)</p>
-        </div>
+        <VideoChat localStream={localStream} remoteStream={remoteStream} />
 
         {/* Text Chat Area */}
         <div className="flex-1 flex flex-col p-2">
