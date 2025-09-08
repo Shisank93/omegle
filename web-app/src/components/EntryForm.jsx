@@ -7,7 +7,6 @@ const EntryForm = ({ onSubmit }) => {
     gender: 'male',
     location: '',
     genderPreference: 'any',
-    interests: '',
   });
 
   const handleChange = (e) => {
@@ -29,11 +28,11 @@ const EntryForm = ({ onSubmit }) => {
   };
 
   return (
-    <div className="max-w-md mx-auto mt-10 p-8 border rounded-lg shadow-lg bg-white dark:bg-gray-800 dark:border-gray-700">
-      <h2 className="text-2xl font-bold text-center mb-6 dark:text-white">Find a Stranger</h2>
+    <div className="max-w-md mx-auto mt-10 p-8 border rounded-lg shadow-lg bg-white">
+      <h2 className="text-2xl font-bold text-center mb-6">Find a Stranger</h2>
       <form onSubmit={handleSubmit}>
         <div className="mb-4">
-          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
+          <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
             Username
           </label>
           <input
@@ -42,13 +41,13 @@ const EntryForm = ({ onSubmit }) => {
             name="name"
             value={formData.name}
             onChange={handleChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="e.g., John Doe"
             required
           />
         </div>
         <div className="mb-4">
-          <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
+          <label htmlFor="age" className="block text-sm font-medium text-gray-700 mb-1">
             Age
           </label>
           <input
@@ -57,13 +56,13 @@ const EntryForm = ({ onSubmit }) => {
             name="age"
             value={formData.age}
             onChange={handleChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="e.g., 25"
             required
           />
         </div>
         <div className="mb-4">
-          <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
+          <label htmlFor="gender" className="block text-sm font-medium text-gray-700 mb-1">
             Your Gender
           </label>
           <select
@@ -71,7 +70,7 @@ const EntryForm = ({ onSubmit }) => {
             name="gender"
             value={formData.gender}
             onChange={handleChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="male">Male</option>
             <option value="female">Female</option>
@@ -79,21 +78,7 @@ const EntryForm = ({ onSubmit }) => {
           </select>
         </div>
         <div className="mb-4">
-          <label htmlFor="interests" className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
-            Interests (comma-separated)
-          </label>
-          <input
-            type="text"
-            id="interests"
-            name="interests"
-            value={formData.interests}
-            onChange={handleChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            placeholder="e.g., programming, music, hiking"
-          />
-        </div>
-        <div className="mb-4">
-          <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
+          <label htmlFor="location" className="block text-sm font-medium text-gray-700 mb-1">
             Location
           </label>
           <input
@@ -102,13 +87,13 @@ const EntryForm = ({ onSubmit }) => {
             name="location"
             value={formData.location}
             onChange={handleChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="e.g., New York, USA"
             required
           />
         </div>
         <div className="mb-6">
-          <label htmlFor="genderPreference" className="block text-sm font-medium text-gray-700 mb-1 dark:text-gray-300">
+          <label htmlFor="genderPreference" className="block text-sm font-medium text-gray-700 mb-1">
             Match with
           </label>
           <select
@@ -116,7 +101,7 @@ const EntryForm = ({ onSubmit }) => {
             name="genderPreference"
             value={formData.genderPreference}
             onChange={handleChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            className="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="any">Any</option>
             <option value="male">Male</option>
