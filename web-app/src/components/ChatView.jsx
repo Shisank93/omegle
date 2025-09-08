@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Message from './Message';
 import StatusIndicator from './StatusIndicator';
 
-const ChatView = ({ messages, onSendMessage, onNext, status, isPartnerConnected }) => {
+const ChatView = ({ messages, onSendMessage, onNext, onReport, onBlock, status, isPartnerConnected }) => {
   const [text, setText] = useState('');
   const messagesEndRef = useRef(null);
 
@@ -29,11 +29,11 @@ const ChatView = ({ messages, onSendMessage, onNext, status, isPartnerConnected 
   };
 
   return (
-    <div className="flex flex-col h-screen max-w-4xl mx-auto p-4 bg-gray-50">
+    <div className="flex flex-col h-screen max-w-4xl mx-auto p-4 bg-gray-50 dark:bg-gray-900">
       <header className="text-center mb-4">
-        <h1 className="text-4xl font-bold text-gray-800">Omegle Clone</h1>
+        <h1 className="text-4xl font-bold text-gray-800 dark:text-white">Vergo</h1>
       </header>
-      <main className="flex-1 flex flex-col lg:flex-row bg-white p-4 rounded-lg shadow-lg overflow-hidden">
+      <main className="flex-1 flex flex-col lg:flex-row bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg overflow-hidden">
         {/* Placeholder for video chat area */}
         <div className="hidden lg:flex lg:w-1/2 bg-gray-900 rounded-lg items-center justify-center text-white">
           <p>Video Chat Area (Future)</p>
@@ -41,7 +41,7 @@ const ChatView = ({ messages, onSendMessage, onNext, status, isPartnerConnected 
 
         {/* Text Chat Area */}
         <div className="flex-1 flex flex-col p-2">
-          <div id="messages" className="flex-grow bg-gray-100 border border-gray-200 rounded-lg p-4 mb-4 overflow-y-auto">
+          <div id="messages" className="flex-grow bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-4 mb-4 overflow-y-auto">
             <StatusIndicator status={status} />
             {messages.map((msg, index) => (
               <Message key={index} sender={msg.sender} text={msg.text} />
@@ -55,7 +55,7 @@ const ChatView = ({ messages, onSendMessage, onNext, status, isPartnerConnected 
               onChange={(e) => setText(e.target.value)}
               onKeyPress={handleKeyPress}
               placeholder="Type a message..."
-              className="flex-grow border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="flex-grow border border-gray-300 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-white"
               disabled={!isPartnerConnected}
             />
             <button
@@ -71,7 +71,19 @@ const ChatView = ({ messages, onSendMessage, onNext, status, isPartnerConnected 
               onClick={onNext}
               className="flex-grow bg-red-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-red-600 transition duration-300"
             >
-              Next Stranger
+              Next
+            </button>
+            <button
+              onClick={onReport}
+              className="bg-yellow-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-yellow-600 transition duration-300"
+            >
+              Report
+            </button>
+            <button
+              onClick={onBlock}
+              className="bg-gray-700 text-white font-bold py-3 px-5 rounded-lg hover:bg-gray-800 transition duration-300"
+            >
+              Block
             </button>
           </div>
         </div>
