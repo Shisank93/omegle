@@ -4,8 +4,8 @@ const Message = ({ sender, text }) => {
   const isYou = sender === 'You';
 
   const messageClass = isYou
-    ? 'bg-blue-500 text-white self-end dark:bg-blue-600'
-    : 'bg-gray-200 text-black self-start dark:bg-gray-600 dark:text-white';
+    ? 'bg-blue-500 text-white self-end'
+    : 'bg-gray-300 text-black self-start';
 
   return (
     <div className={`flex ${isYou ? 'justify-end' : 'justify-start'} mb-2`}>

@@ -7,7 +7,7 @@ const StatusIndicator = ({ status }) => {
 
   return (
     <div className="text-center my-2">
-      <p className="text-sm text-gray-500 italic dark:text-gray-400">{status}</p>
+      <p className="text-sm text-gray-500 italic">{status}</p>
     </div>
   );
 };
