@@ -8,13 +8,14 @@ const EntryForm = ({ onSubmit }) => {
     location: '',
     genderPreference: 'any',
     interests: '',
+    isVideo: false,
   });
 
   const handleChange = (e) => {
-    const { name, value } = e.target;
+    const { name, value, type, checked } = e.target;
     setFormData((prevData) => ({
       ...prevData,
-      [name]: value,
+      [name]: type === 'checkbox' ? checked : value,
     }));
   };
 
@@ -123,6 +124,18 @@ const EntryForm = ({ onSubmit }) => {
             <option value="female">Female</option>
             <option value="other">Other</option>
           </select>
+        </div>
+        <div className="mb-6">
+          <label className="flex items-center">
+            <input
+              type="checkbox"
+              name="isVideo"
+              checked={formData.isVideo}
+              onChange={handleChange}
+              className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            />
+            <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Enable Video Chat</span>
+          </label>
         </div>
         <button
           type="submit"

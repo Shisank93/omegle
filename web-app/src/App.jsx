@@ -16,6 +16,8 @@ function App() {
     sendMessage,
     reportUser,
     blockUser,
+    localStream,
+    remoteStream,
   } = useChatService();
 
   const [isPartnerConnected, setIsPartnerConnected] = React.useState(false);
@@ -85,6 +87,8 @@ function App() {
           onBlock={handleBlock}
           status={status}
           isPartnerConnected={isPartnerConnected}
+          localStream={localStream}
+          remoteStream={remoteStream}
         />
       )}
     </div>
