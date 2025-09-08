@@ -1,14 +1,17 @@
-import { useState, useEffect, useRef } from 'react';
-import { db, auth, signIn } from '../services/firebase';
+// useChatService.js
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 import {
+  getFirestore,
   collection,
-  addDoc,
   query,
   where,
   limit,
   getDocs,
-  serverTimestamp,
+  addDoc,
   doc,
+  serverTimestamp,
   deleteDoc,
   setDoc,
   onSnapshot,
@@ -18,18 +21,32 @@ import {
 
 const servers = {
   iceServers: [
-    {
-      urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'],
-    },
+    { urls: ['stun:stun1.l.google.com:19302', 'stun:stun2.l.google.com:19302'] },
   ],
   iceCandidatePoolSize: 10,
 };
 
+const firebaseConfig = {
+        apiKey: "AIzaSyCKFdiShA5FNwYy3-jdBclGuQa8LGUvfEw",
+        authDomain: "omegle-f0b32.firebaseapp.com",
+        projectId: "omegle-f0b32",
+        storageBucket: "omegle-f0b32.appspot.com", // Note: I corrected this from .firebasestorage.app to .appspot.com, which is the standard format.
+        messagingSenderId: "926315634445",
+        appId: "1:926315634445:web:283e76e6bfd4b9899a5a44"
+        };
+// Ensure single app instance across HMR / reloads
+if (!globalThis._chatFirebaseApp) {
+  globalThis._chatFirebaseApp = initializeApp(firebaseConfig);
+}
+const firebaseApp = globalThis._chatFirebaseApp;
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
+
 const useChatService = () => {
   const [user, setUser] = useState(null);
+  const [userInfo, setUserInfo] = useState(null);
   const [status, setStatus] = useState('Initializing...');
   const [error, setError] = useState(null);
-  const [userInfo, setUserInfo] = useState(null);
   const [waitingDocRef, setWaitingDocRef] = useState(null);
   const [chatRoomId, setChatRoomId] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -40,121 +57,209 @@ const useChatService = () => {
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
 
-  const pc = useRef(new RTCPeerConnection(servers));
+  const pc = useRef(null);
   const listenersRef = useRef([]);
 
-  // 1. Sign in the user anonymously
+  // Helper to add listener and keep ref for cleanup
+  const pushListener = (unsub) => {
+    if (unsub && typeof unsub === 'function') listenersRef.current.push(unsub);
+  };
+
+  // Initialize RTCPeerConnection when needed
+  const ensurePeerConnection = () => {
+    if (!pc.current) pc.current = new RTCPeerConnection(servers);
+
+    // attach default handlers if not already attached
+    pc.current.ontrack = (event) => {
+      // remote stream (first stream)
+      setRemoteStream(event.streams && event.streams[0] ? event.streams[0] : null);
+    };
+
+    pc.current.onicecandidate = (event) => {
+      // ICE candidates are handled per-room in start/room logic
+      // leaving handler blank here; concrete handlers added where room refs known
+    };
+
+    return pc.current;
+  };
+
+  // Sign in anonymously on mount
   useEffect(() => {
-    const authenticate = async () => {
+    let mounted = true;
+    const run = async () => {
       try {
         setStatus('Authenticating...');
-        const currentUser = await signIn();
+        const res = await signInAnonymously(auth);
+        if (!mounted) return;
+        const currentUser = res.user;
         setUser(currentUser);
-        const blockedUsersRef = collection(db, 'users', currentUser.uid, 'blocked');
-        const snapshot = await getDocs(blockedUsersRef);
-        setBlockedUsers(snapshot.docs.map(doc => doc.id));
-        setStatus('Ready to chat. Please fill out the form.');
+
+        // load blocked users (if any)
+        const blockedRef = collection(db, 'users', currentUser.uid, 'blocked');
+        const blockedSnap = await getDocs(blockedRef);
+        setBlockedUsers(blockedSnap.docs.map((d) => d.id));
+
+        setStatus('Ready to chat. Fill the form to start.');
       } catch (err) {
-        console.error(err);
-        setError('Authentication failed. Please try again later.');
+        console.error('Sign-in error', err);
+        setError('Failed to sign in.');
         setStatus('Error');
       }
     };
-    authenticate();
+
+    run();
+
+    return () => {
+      mounted = false;
+    };
   }, []);
 
+  // Core: start searching for a partner and optionally enable media
   const startSearching = async (newUserInfo) => {
     if (!user) {
       setError('User not authenticated.');
       return;
     }
 
-    const isVideoAllowed = newUserInfo.isVideo && newUserInfo.age >= 18;
+    setError(null);
+    // Normalize interests to an array of strings
+    const interests = newUserInfo.interests
+      ? newUserInfo.interests
+          .split(',')
+          .map((i) => i.trim().toLowerCase())
+          .filter(Boolean)
+      : [];
 
-    if (isVideoAllowed) {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-            setLocalStream(stream);
-            stream.getTracks().forEach((track) => {
-                pc.current.addTrack(track, stream);
-            });
-        } catch (err) {
-            setError('Could not access camera/mic. Please allow access and try again.');
-            setStatus('Error');
-            return;
-        }
-    }
-
-    const interests = newUserInfo.interests ? newUserInfo.interests.split(',').map(i => i.trim().toLowerCase()).filter(i => i) : [];
+    // Video allowed only if user indicates and age >= 18
+    const isVideoAllowed = !!(newUserInfo.isVideo && newUserInfo.age >= 18);
     const userInfoWithInterests = { ...newUserInfo, interests, isVideo: isVideoAllowed };
     setUserInfo(userInfoWithInterests);
 
+    // Acquire media if video requested
+    if (isVideoAllowed) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        setLocalStream(stream);
+        const connection = ensurePeerConnection();
+        stream.getTracks().forEach((track) => connection.addTrack(track, stream));
+      } catch (err) {
+        console.error('Media error', err);
+        setError('Could not access camera/mic. Please allow access and try again.');
+        setStatus('Error');
+        return;
+      }
+    }
+
     setStatus('Searching for a partner...');
     const waitingPoolRef = collection(db, 'waitingPool');
+
     const myInfo = {
       userId: user.uid,
       userInfo: userInfoWithInterests,
       createdAt: serverTimestamp(),
     };
+
     const myDocRef = await addDoc(waitingPoolRef, myInfo);
     setWaitingDocRef(myDocRef);
 
-    const findPartner = async (q) => {
-        const snapshot = await getDocs(q);
-        if (snapshot.empty) return null;
-        return snapshot.docs.find(doc => !blockedUsers.includes(doc.data().userId));
+    // Try to find partner (simple query excluding self)
+    const findPartner = async () => {
+      const q = query(waitingPoolRef, where('userId', '!=', user.uid), limit(10));
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) return null;
+
+      // prefer partner not blocked and optionally with overlapping interests
+      for (const docSnap of snapshot.docs) {
+        const data = docSnap.data();
+        if (!data || !data.userId) continue;
+        if (blockedUsers.includes(data.userId)) continue;
+        return docSnap;
+      }
+      return null;
     };
 
-    let partnerDoc;
-    // ... (Query Waterfall - this logic is complex and can be simplified for now)
-    const q = query(waitingPoolRef, where('userId', '!=', user.uid), limit(10));
-    partnerDoc = await findPartner(q);
+    try {
+      const partnerDoc = await findPartner();
+      if (partnerDoc) {
+        const partnerData = partnerDoc.data();
+        setPartnerId(partnerData.userId);
+        setIsCaller(true);
 
-    if (partnerDoc) {
-      const partnerData = partnerDoc.data();
-      setPartnerId(partnerData.userId);
-      setIsCaller(true);
+        // create chat room
+        const newRoomRef = doc(collection(db, 'chatRooms'));
+        await setDoc(newRoomRef, {
+          users: [user.uid, partnerData.userId],
+          createdAt: serverTimestamp(),
+          isVideo: userInfoWithInterests.isVideo || (partnerData.userInfo && partnerData.userInfo.isVideo),
+        });
+        setChatRoomId(newRoomRef.id);
+        setStatus(`Matched with ${partnerData.userInfo?.name || 'a stranger'}!`);
 
-      const newRoomRef = doc(collection(db, 'chatRooms'));
-      await setDoc(newRoomRef, {
-        members: [user.uid, partnerData.userId],
-        createdAt: serverTimestamp(),
-        isVideo: newUserInfo.isVideo || partnerData.userInfo.isVideo,
-      });
+        // Send invitation to partner (partner listens on invitations/<theirUserId>)
+        const invitationRef = doc(db, 'invitations', partnerData.userId);
+        await setDoc(invitationRef, {
+          roomId: newRoomRef.id,
+          from: user.uid,
+          createdAt: serverTimestamp(),
+        });
 
-      await setDoc(doc(db, 'invitations', partnerData.userId), {
-        roomId: newRoomRef.id,
-        from: user.uid,
-      });
+        // cleanup waiting documents
+        await deleteDoc(myDocRef);
+        await deleteDoc(partnerDoc.ref);
+      } else {
+        // no partner found immediately — listen for invitations
+        setStatus('No one immediately available. Waiting for an invitation...');
 
-      setChatRoomId(newRoomRef.id);
-      setStatus(`Matched with ${partnerData.userInfo.name}!`);
+        const invitationRef = doc(db, 'invitations', user.uid);
+        const unsubInvitation = onSnapshot(invitationRef, async (snap) => {
+          if (!snap.exists()) return;
+          const invitation = snap.data();
+          if (!invitation) return;
 
-      await deleteDoc(myDocRef);
-      await deleteDoc(partnerDoc.ref);
-    } else {
-      setStatus('No one is available yet. Waiting for a partner...');
-      const invitationRef = doc(db, 'invitations', user.uid);
-      const unsub = onSnapshot(invitationRef, async (doc) => {
-        if (doc.exists()) {
-          const invitation = doc.data();
+          // ignore invites from blocked users
           if (blockedUsers.includes(invitation.from)) {
-            await deleteDoc(invitationRef);
+            await deleteDoc(invitationRef).catch(() => {});
             return;
           }
+
+          // accept invitation
           setPartnerId(invitation.from);
           setIsCaller(false);
           setChatRoomId(invitation.roomId);
           setStatus('You have been matched!');
-          await deleteDoc(invitationRef);
-          unsub();
-        }
-      });
-      listenersRef.current.push(unsub);
+          // remove invitation document after accepting
+          await deleteDoc(invitationRef).catch(() => {});
+        });
+
+        pushListener(unsubInvitation);
+      }
+    } catch (err) {
+      console.error('startSearching error', err);
+      setError('Failed while searching for partners.');
     }
   };
 
-  // Listen for WebRTC signaling and messages
+  // Send a chat message
+  const sendMessage = async (text) => {
+    if (!chatRoomId || !user) return;
+    // Simple profanity filter example - customize as needed
+    const bannedWords = ['badword1', 'badword2', 'badword3'];
+    const containsBanned = bannedWords.some((w) => text.toLowerCase().includes(w));
+    if (containsBanned) {
+      setError('Your message contains inappropriate language and was not sent.');
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+
+    const messagesRef = collection(db, 'chatRooms', chatRoomId, 'messages');
+    await addDoc(messagesRef, {
+      text,
+      sender: user.uid,
+      createdAt: serverTimestamp(),
+    });
+  };
+
+  // Listen for chat room changes (messages + WebRTC signaling)
   useEffect(() => {
     if (!chatRoomId || !user) return;
 
@@ -162,114 +267,161 @@ const useChatService = () => {
     const offerCandidatesRef = collection(roomRef, 'offerCandidates');
     const answerCandidatesRef = collection(roomRef, 'answerCandidates');
 
-    pc.current.onicecandidate = (event) => {
-      if (event.candidate) {
-        addDoc(isCaller ? offerCandidatesRef : answerCandidatesRef, event.candidate.toJSON());
+    const connection = ensurePeerConnection();
+
+    // onicecandidate writes to the right candidate collection
+    connection.onicecandidate = (event) => {
+      if (!event.candidate) return;
+      const candidate = event.candidate.toJSON();
+      if (isCaller) {
+        addDoc(offerCandidatesRef, candidate).catch(console.error);
+      } else {
+        addDoc(answerCandidatesRef, candidate).catch(console.error);
       }
     };
 
-    pc.current.ontrack = (event) => {
-      setRemoteStream(event.streams[0]);
+    // attach remote track handler (already set in ensurePeerConnection)
+    connection.ontrack = (event) => {
+      setRemoteStream(event.streams && event.streams[0] ? event.streams[0] : null);
     };
 
-    const roomUnsubscribe = onSnapshot(roomRef, async (snapshot) => {
-      const data = snapshot.data();
+    // Messages listener
+    const messagesRef = collection(db, 'chatRooms', chatRoomId, 'messages');
+    const messagesQuery = query(messagesRef, orderBy('createdAt'));
+    const unsubMessages = onSnapshot(messagesQuery, (snap) => {
+      const newMessages = snap.docs.map((d) => {
+        const data = d.data();
+        return {
+          id: d.id,
+          text: data.text,
+          createdAt: data.createdAt,
+          sender: data.sender === user.uid ? 'You' : 'Stranger',
+        };
+      });
+      setMessages(newMessages);
+    });
+    pushListener(unsubMessages);
+
+    // Room document listener (for offer/answer)
+    const unsubRoom = onSnapshot(roomRef, async (snap) => {
+      const data = snap.exists() ? snap.data() : null;
       if (!data) {
-        setStatus('Partner has disconnected. Searching for a new one...');
-        leaveChat(false);
-        if (userInfo) startSearching(userInfo);
+        // room deleted --> partner left
+        setStatus('Partner disconnected. Chat ended.');
+        // We keep local cleanup in leaveChat
         return;
       }
 
-      if (isCaller && !pc.current.currentRemoteDescription && data?.answer) {
-        const answerDescription = new RTCSessionDescription(data.answer);
-        await pc.current.setRemoteDescription(answerDescription);
+      // If we are caller and answer is set on room, apply it
+      if (isCaller && data.answer && !connection.currentRemoteDescription) {
+        try {
+          const answerDesc = new RTCSessionDescription(data.answer);
+          await connection.setRemoteDescription(answerDesc);
+        } catch (err) {
+          console.error('Error setting remote answer', err);
+        }
       }
 
-      if (!isCaller && !pc.current.currentRemoteDescription && data?.offer) {
-        const offerDescription = new RTCSessionDescription(data.offer);
-        await pc.current.setRemoteDescription(offerDescription);
-        const answerDescription = await pc.current.createAnswer();
-        await pc.current.setLocalDescription(answerDescription);
-        await updateDoc(roomRef, { answer: { type: answerDescription.type, sdp: answerDescription.sdp } });
+      // If we are callee and an offer appears, create & set answer
+      if (!isCaller && data.offer && !connection.currentRemoteDescription) {
+        try {
+          const offerDesc = new RTCSessionDescription(data.offer);
+          await connection.setRemoteDescription(offerDesc);
+          const answer = await connection.createAnswer();
+          await connection.setLocalDescription(answer);
+          await updateDoc(roomRef, { answer: { type: answer.type, sdp: answer.sdp } });
+        } catch (err) {
+          console.error('Error handling offer -> answer', err);
+        }
       }
     });
+    pushListener(unsubRoom);
 
-    const candidatesUnsubscribe = onSnapshot(isCaller ? answerCandidatesRef : offerCandidatesRef, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
+    // Candidate listeners (the caller listens to answerCandidates, callee to offerCandidates)
+    const candidatesRefToListen = isCaller ? answerCandidatesRef : offerCandidatesRef;
+    const unsubCandidates = onSnapshot(candidatesRefToListen, (snap) => {
+      snap.docChanges().forEach((change) => {
         if (change.type === 'added') {
-          pc.current.addIceCandidate(new RTCIceCandidate(change.doc.data()));
+          const cand = change.doc.data();
+          connection.addIceCandidate(new RTCIceCandidate(cand)).catch(console.error);
         }
       });
     });
+    pushListener(unsubCandidates);
 
-    // Create offer if caller
-    if (isCaller && userInfo.isVideo) {
-      const createOffer = async () => {
-        const offerDescription = await pc.current.createOffer();
-        await pc.current.setLocalDescription(offerDescription);
-        await updateDoc(roomRef, { offer: { type: offerDescription.type, sdp: offerDescription.sdp } });
+    // If caller, create offer (only if isCaller === true)
+    const maybeCreateOffer = async () => {
+      if (!isCaller) return;
+      try {
+        const offer = await connection.createOffer();
+        await connection.setLocalDescription(offer);
+        await updateDoc(roomRef, { offer: { type: offer.type, sdp: offer.sdp } });
+      } catch (err) {
+        console.error('Failed to create offer', err);
       }
-      createOffer();
-    }
+    };
+    maybeCreateOffer();
 
-    const messagesRef = collection(db, 'chatRooms', chatRoomId, 'messages');
-    const q = query(messagesRef, orderBy('createdAt'));
-    const messagesUnsubscribe = onSnapshot(q, (querySnapshot) => {
-      setMessages(querySnapshot.docs.map((doc) => ({
-        id: doc.id, ...doc.data(), sender: doc.data().senderId === user.uid ? 'You' : 'Stranger'
-      })));
-    });
-
-    listenersRef.current.push(roomUnsubscribe, candidatesUnsubscribe, messagesUnsubscribe);
-
+    // cleanup on effect unmount or chatRoomId change
     return () => {
-      listenersRef.current.forEach(unsubscribe => unsubscribe());
+      // do not delete room here; leaveChat handles that
+      listenersRef.current.forEach((unsub) => {
+        try {
+          unsub();
+        } catch (e) {
+          // ignore
+        }
+      });
       listenersRef.current = [];
     };
-  }, [chatRoomId, user, isCaller, userInfo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatRoomId, user, isCaller]); // userInfo not required here
 
-  const sendMessage = async (text) => {
-    if (!chatRoomId || !user) return;
-
-    const bannedWords = ['badword1', 'badword2', 'badword3']; // Placeholder
-    const containsBannedWord = bannedWords.some(word => text.toLowerCase().includes(word));
-
-    if (containsBannedWord) {
-      setError('Your message contains inappropriate language and was not sent.');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-
-    const messagesRef = collection(db, 'chatRooms', chatRoomId, 'messages');
-    await addDoc(messagesRef, { text, senderId: user.uid, createdAt: serverTimestamp() });
-  };
-
+  // leaveChat: cleanup local media, RTCPeerConnection, listeners and optionally remove waiting doc / room
   const leaveChat = async (shouldDeleteRoom = true) => {
-    listenersRef.current.forEach(unsubscribe => unsubscribe());
+    // remove listeners
+    listenersRef.current.forEach((unsub) => {
+      try {
+        unsub();
+      } catch (e) {}
+    });
     listenersRef.current = [];
 
+    // stop local media
     if (localStream) {
-        localStream.getTracks().forEach((track) => track.stop());
-    }
-    if (pc.current) {
-        pc.current.close();
-        pc.current = new RTCPeerConnection(servers);
+      localStream.getTracks().forEach((t) => t.stop());
+      setLocalStream(null);
     }
 
-    if (shouldDeleteRoom && chatRoomId) {
-      await deleteDoc(doc(db, 'chatRooms', chatRoomId));
+    // close peer connection
+    if (pc.current) {
+      try {
+        pc.current.close();
+      } catch (e) {}
+      pc.current = null;
     }
+
+    // delete waiting doc if exists
     if (waitingDocRef) {
-      await deleteDoc(waitingDocRef);
+      try {
+        await deleteDoc(waitingDocRef);
+      } catch (e) {}
       setWaitingDocRef(null);
+    }
+
+    // optionally delete chat room
+    if (shouldDeleteRoom && chatRoomId) {
+      try {
+        await deleteDoc(doc(db, 'chatRooms', chatRoomId));
+      } catch (e) {
+        // ignore deletion errors
+      }
     }
 
     setChatRoomId(null);
     setMessages([]);
     setPartnerId(null);
     setIsCaller(false);
-    setLocalStream(null);
     setRemoteStream(null);
     setStatus('Chat ended. Find a new partner?');
   };
@@ -281,8 +433,8 @@ const useChatService = () => {
       reportedUserId: partnerId,
       reporterId: user.uid,
       timestamp: serverTimestamp(),
-      chatRoomId: chatRoomId,
-      messages: messages, // Add chat transcript to the report
+      chatRoomId: chatRoomId || null,
+      messages: messages || [],
     });
   };
 
@@ -290,10 +442,49 @@ const useChatService = () => {
     if (!user || !partnerId) return;
     const blockRef = doc(db, 'users', user.uid, 'blocked', partnerId);
     await setDoc(blockRef, { timestamp: serverTimestamp() });
-    setBlockedUsers([...blockedUsers, partnerId]);
+    setBlockedUsers((prev) => (prev.includes(partnerId) ? prev : [...prev, partnerId]));
   };
 
-  return { user, status, error, chatRoomId, messages, localStream, remoteStream, startSearching, leaveChat, sendMessage, reportUser, blockUser };
+  // cleanup on unmount: leave chat and sign out not handled here (optional)
+  useEffect(() => {
+    return () => {
+      // stop everything
+      listenersRef.current.forEach((unsub) => {
+        try {
+          unsub();
+        } catch (e) {}
+      });
+      listenersRef.current = [];
+      if (localStream) {
+        try {
+          localStream.getTracks().forEach((t) => t.stop());
+        } catch (e) {}
+      }
+      if (pc.current) {
+        try {
+          pc.current.close();
+        } catch (e) {}
+        pc.current = null;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return {
+    user,
+    status,
+    error,
+    chatRoomId,
+    messages,
+    localStream,
+    remoteStream,
+    startSearching,
+    leaveChat,
+    sendMessage,
+    reportUser,
+    blockUser,
+    setError,
+  };
 };
 
 export default useChatService;
