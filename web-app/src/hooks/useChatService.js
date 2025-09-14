@@ -56,6 +56,8 @@ const useChatService = () => {
 
   const [localStream, setLocalStream] = useState(null);
   const [remoteStream, setRemoteStream] = useState(null);
+  const [isAudioMuted, setIsAudioMuted] = useState(false);
+  const [isVideoMuted, setIsVideoMuted] = useState(false);
 
   const pc = useRef(null);
   const listenersRef = useRef([]);
@@ -470,6 +472,24 @@ const useChatService = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const toggleAudio = () => {
+    if (localStream) {
+      localStream.getAudioTracks().forEach((track) => {
+        track.enabled = !track.enabled;
+        setIsAudioMuted(!track.enabled);
+      });
+    }
+  };
+
+  const toggleVideo = () => {
+    if (localStream) {
+      localStream.getVideoTracks().forEach((track) => {
+        track.enabled = !track.enabled;
+        setIsVideoMuted(!track.enabled);
+      });
+    }
+  };
+
   return {
     user,
     status,
@@ -478,12 +498,16 @@ const useChatService = () => {
     messages,
     localStream,
     remoteStream,
+    isAudioMuted,
+    isVideoMuted,
     startSearching,
     leaveChat,
     sendMessage,
     reportUser,
     blockUser,
     setError,
+    toggleAudio,
+    toggleVideo,
   };
 };
 

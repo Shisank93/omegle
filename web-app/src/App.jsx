@@ -18,6 +18,10 @@ function App() {
     blockUser,
     localStream,
     remoteStream,
+    isAudioMuted,
+    isVideoMuted,
+    toggleAudio,
+    toggleVideo,
   } = useChatService();
 
   const [isPartnerConnected, setIsPartnerConnected] = React.useState(false);
@@ -89,6 +93,10 @@ function App() {
           isPartnerConnected={isPartnerConnected}
           localStream={localStream}
           remoteStream={remoteStream}
+          isAudioMuted={isAudioMuted}
+          isVideoMuted={isVideoMuted}
+          onToggleAudio={toggleAudio}
+          onToggleVideo={toggleVideo}
         />
       )}
     </div>
