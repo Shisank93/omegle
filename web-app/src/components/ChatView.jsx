@@ -3,7 +3,21 @@ import Message from './Message';
 import StatusIndicator from './StatusIndicator';
 import VideoChat from './VideoChat';
 
-const ChatView = ({ messages, onSendMessage, onNext, onReport, onBlock, status, isPartnerConnected, localStream, remoteStream }) => {
+const ChatView = ({
+  messages,
+  onSendMessage,
+  onNext,
+  onReport,
+  onBlock,
+  status,
+  isPartnerConnected,
+  localStream,
+  remoteStream,
+  isAudioMuted,
+  isVideoMuted,
+  onToggleAudio,
+  onToggleVideo,
+}) => {
   const [text, setText] = useState('');
   const messagesEndRef = useRef(null);
 
@@ -29,20 +43,33 @@ const ChatView = ({ messages, onSendMessage, onNext, onReport, onBlock, status, 
     }
   };
 
+  const hasVideo = localStream || remoteStream;
+
   return (
-    <div className="flex flex-col h-screen max-w-4xl mx-auto p-4 bg-gray-50 dark:bg-gray-900">
+    <div className="flex flex-col h-screen max-w-6xl mx-auto p-4 font-sans">
       <header className="text-center mb-4">
-        <h1 className="text-4xl font-bold text-gray-800 dark:text-white">Vergo</h1>
+        <h1 className="text-5xl font-bold text-gray-800 dark:text-white">Vergo</h1>
       </header>
-      <main className="flex-1 flex flex-col lg:flex-row bg-white dark:bg-gray-800 p-4 rounded-lg shadow-lg overflow-hidden">
-        <VideoChat localStream={localStream} remoteStream={remoteStream} />
+      <main className={`flex-1 flex flex-col lg:flex-row bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-2xl overflow-hidden gap-4`}>
+        {hasVideo && (
+          <div className="lg:w-1/2">
+            <VideoChat
+              localStream={localStream}
+              remoteStream={remoteStream}
+              isAudioMuted={isAudioMuted}
+              isVideoMuted={isVideoMuted}
+              onToggleAudio={onToggleAudio}
+              onToggleVideo={onToggleVideo}
+            />
+          </div>
+        )}
 
         {/* Text Chat Area */}
-        <div className="flex-1 flex flex-col p-2">
-          <div id="messages" className="flex-grow bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-4 mb-4 overflow-y-auto">
+        <div className={`flex-1 flex flex-col p-2 ${!hasVideo ? 'lg:w-full' : 'lg:w-1/2'}`}>
+          <div id="messages" className="flex-grow bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-4 mb-4 overflow-y-auto space-y-4">
             <StatusIndicator status={status} />
-            {messages.map((msg, index) => (
-              <Message key={index} sender={msg.sender} text={msg.text} />
+            {messages.map((msg) => (
+              <Message key={msg.id} sender={msg.sender} text={msg.text} createdAt={msg.createdAt} />
             ))}
             <div ref={messagesEndRef} />
           </div>
@@ -64,10 +91,10 @@ const ChatView = ({ messages, onSendMessage, onNext, onReport, onBlock, status, 
               Send
             </button>
           </div>
-          <div className="flex gap-2 mt-4">
+          <div className="grid grid-cols-3 gap-2 mt-4">
             <button
               onClick={onNext}
-              className="flex-grow bg-red-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-red-600 transition duration-300"
+              className="bg-red-500 text-white font-bold py-3 px-5 rounded-lg hover:bg-red-600 transition duration-300"
             >
               Next
             </button>
